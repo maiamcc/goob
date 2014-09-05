@@ -1,11 +1,28 @@
 import os
+import inspect
+
+## DECORATORS
+def requires_repo(func):
+    def checked_func(*args):
+        if os.path.exists("./.goob"):
+            return func(*args)
+        else:
+            raise ValueError("Not a goob repo!")
+    return checked_func
+
+def requires_extant_file(func):
+    def checked_func(filename, *args):
+        if os.path.exists(filename):
+            return func(filename, *args)
+        else:
+            raise ValueError("File does not exist!")
+    return checked_func
 
 ## USER COMMANDS
 def init():
     """Makes a new .goob directory in the current directory, populates
         it with the relevant stuff"""
-    # if dir .goob doesn't exist
-    # make dir .goob, /objects, /index, /pointer, /refs
+
     if os.path.exists("./.goob"):
         print "This is already a goob repo! Good job! :D"
     else:
@@ -15,6 +32,8 @@ def init():
         open("./.goob/index", "a").close()
         open("./.goob/pointer", "a").close()
 
+@requires_extant_file
+@requires_repo
 def add(filename):
     """Stages the given file for commit. Add("-a") will
         add all files in the directory (except those in .goobignore)"""
@@ -30,12 +49,16 @@ def add(filename):
     # --> update_index(filename, hash)
     pass
 
+@requires_extant_file
+@requires_repo
 def unstage(filename):
     """If staged, the given file is unstaged."""
     # (if file exists)
     # (if dir is goob repo)
     pass
 
+@requires_extant_file
+@requires_repo
 def rm(filename):
     """The given file won't be tracked in the next commit, or subsequently,
         till added again."""
@@ -44,6 +67,7 @@ def rm(filename):
     # (if dir is goob repo)
     pass
 
+@requires_repo
 def commit(message):
     """Makes a new commit object (with parent = current commit), representing all
         tracked files in a tree(/subtrees), with the given commit message, author,
@@ -53,6 +77,7 @@ def commit(message):
 
     pass
 
+@requires_repo
 def status():
     """Displays untracked files, modified files, unmodified files."""
     # untracked = files in dir not in index (or goobignore)
@@ -62,12 +87,14 @@ def status():
     # (if dir is goob repo)
     pass
 
+@requires_repo
 def checkout(commit_hash):
     """Restores filesystem to state represented by given commit."""
     # if modified files, ask you to add those changes first.
     # (if dir is goob repo, if commit exists)
     pass
 
+@requires_repo
 def list_files():
     """Lists all of the files being tracked by goob (from .goob/index)"""
 

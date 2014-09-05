@@ -1,12 +1,19 @@
-#!/usr/bin/python
+import os
 
 ## USER COMMANDS
 def init():
     """Makes a new .goob directory in the current directory, populates
         it with the relevant stuff"""
     # if dir .goob doesn't exist
-    # make dir .goob, /objects, /index, /pointer
-    pass
+    # make dir .goob, /objects, /index, /pointer, /refs
+    if os.path.exists("./.goob"):
+        print "This is already a goob repo! Good job! :D"
+    else:
+        os.mkdir("./.goob")
+        os.mkdir("./.goob/objects")
+        os.mkdir("./.goob/refs")
+        open("./.goob/index", "a").close()
+        open("./.goob/pointer", "a").close()
 
 def add(filename):
     """Stages the given file for commit. Add("-a") will
@@ -44,7 +51,6 @@ def commit(message):
 
     # (if dir is goob repo)
 
-    #
     pass
 
 def status():

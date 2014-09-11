@@ -1,5 +1,7 @@
 import os
 import inspect
+import json
+
 
 ## DECORATORS
 def requires_repo(func):
@@ -37,17 +39,25 @@ def init():
 def add(filename):
     """Stages the given file for commit. Add("-a") will
         add all files in the directory (except those in .goobignore)"""
-    # (if file exists)
-    # (if dir is goob repo)
 
-    # check for file in index
-        # if file in index: check version in dir for changes vs. the one hashed to in index.
-            # if different, add new one (blob file, add name+hash to index)
-        # else, blob file, add name+hash to index
+    with open("./.goob/index") as f:
+        index_data = json.read(f)
 
-    # --> hash = save_in_hash(filecontents, "blob")
-    # --> update_index(filename, hash)
-    pass
+    # index format: dict where index[filename] = hashhashash
+
+    with open(filename) as f:
+        contents = f.read()
+    hash = make_hash(contents, 'blob')
+    # (hashes are unique, right?)
+
+    if filename in index_data and index_data[filename] == hash:
+        print "This file hasn't changed!"
+    else:
+        save_hash(contents, hash)
+        index_data[filename] = hash
+
+    with open("./.goob/index", 'w') as f:
+        json.write(f, index_data)
 
 @requires_extant_file
 @requires_repo
@@ -148,14 +158,25 @@ def lookup_by_hash(hash):
         # when I implement contents-encoding, will need to decode here.
     pass
 
-def save_in_hash(contents, type):
-    """Makes a file path for an object, based on its type and contents."""
+def make_hash(contents, type):
+    """Return hash of the contents with type prepended."""
     # type -- tr (tree), bl (blob), co(commit)
     # e.g. tr/hash(contents) for a tree
-    # saves a file with name hash(contents) in dir 'type', writes 'contents' to that file
+
+    from hashlib import sha1
+    return '%s%s' % (type[:2], sha1(contents).hexdigest())
+
+def save_hash(contents, hash):
+    """Save the contents at the given hash. """
+
+    path = os.path.join('./.goob/objects', hash[:2], hash[2:])
+    with open(path, 'w') as f:
+        f.write(contents)
+
     # eventually will be encoded
-    # return hash (no slashes)
-    pass
+
+
+
 
 
 ### USEFUL COMMANDS

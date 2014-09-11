@@ -1,15 +1,35 @@
 import os
 import inspect
 import json
+from hashlib import sha1
 
+# GLOBAL PATH NAMES
+REPO_PATH = "./.goob"
+OBJECTS_PATH = os.path.join(REPO_PATH, "objects")
+REFS_PATH = os.path.join(REPO_PATH, "refs")
+INDEX_PATH = os.path.join(REPO_PATH, "index")
+POINTER_PATH = os.path.join(REPO_PATH, "pointer")
+BLOB_PATH = os.path.join(OBJECTS_PATH, "bl")
+TREE_PATH = os.path.join(OBJECTS_PATH, "tr")
+COMMIT_PATH = os.path.join(OBJECTS_PATH, "co")
+PATHS = [REPO_PATH, OBJECTS_PATH, REFS_PATH, INDEX_PATH,
+    POINTER_PATH, BLOB_PATH, TREE_PATH, COMMIT_PATH]
+
+# ERRORS
+class GoobError(Exception): pass
+
+class NoRepoError(GoobError): pass
+class RepoExistsError(GoobError): pass
+class NoFileError(GoobError): pass
+class NoChangesError(GoobError): pass
 
 ## DECORATORS
 def requires_repo(func):
     def checked_func(*args):
-        if os.path.exists("./.goob"):
+        if os.path.exists(REPO_PATH):
             return func(*args)
         else:
-            raise ValueError("Not a goob repo!")
+            raise NoRepoError("Not a goob repo!")
     return checked_func
 
 def requires_extant_file(func):
@@ -17,7 +37,7 @@ def requires_extant_file(func):
         if os.path.exists(filename):
             return func(filename, *args)
         else:
-            raise ValueError("File does not exist!")
+            raise NoFileError("File does not exist!")
     return checked_func
 
 ## USER COMMANDS
@@ -25,23 +45,31 @@ def init():
     """Makes a new .goob directory in the current directory, populates
         it with the relevant stuff"""
 
-    if os.path.exists("./.goob"):
-        print "This is already a goob repo! Good job! :D"
+    if os.path.exists(REPO_PATH):
+        raise RepoExistsError("This is already a goob repo!")
     else:
-        os.mkdir("./.goob")
-        os.mkdir("./.goob/objects")
-        os.mkdir("./.goob/refs")
-        open("./.goob/index", "a").close()
-        open("./.goob/pointer", "a").close()
+        os.mkdir(REPO_PATH)
+        os.mkdir(OBJECTS_PATH)
+        os.mkdir(REFS_PATH)
+        os.mkdir(BLOB_PATH)
+        os.mkdir(TREE_PATH)
+        os.mkdir(COMMIT_PATH)
+        open(INDEX_PATH, "a").close()
+        open(POINTER_PATH, "a").close()
 
-@requires_extant_file
 @requires_repo
+@requires_extant_file
 def add(filename):
-    """Stages the given file for commit. Add("-a") will
-        add all files in the directory (except those in .goobignore)"""
+    """Stages the given file for commit."""
 
-    with open("./.goob/index") as f:
-        index_data = json.read(f)
+    # TODO: Add("-a") will add all files in the directory (except those in .goobignore)"""
+
+    # later: check if index contains stuff
+    with open(INDEX_PATH) as f:
+        try:
+            index_data = json.load(f)
+        except ValueError:
+            index_data = {}
 
     # index format: dict where index[filename] = hashhashash
 
@@ -51,24 +79,24 @@ def add(filename):
     # (hashes are unique, right?)
 
     if filename in index_data and index_data[filename] == hash:
-        print "This file hasn't changed!"
+        raise NoChangesError("This file hasn't changed! Nothing added.")
     else:
         save_hash(contents, hash)
         index_data[filename] = hash
 
-    with open("./.goob/index", 'w') as f:
-        json.write(f, index_data)
+    with open(INDEX_PATH, 'w') as f:
+        json.dump(index_data, f)
 
-@requires_extant_file
 @requires_repo
+@requires_extant_file
 def unstage(filename):
     """If staged, the given file is unstaged."""
     # (if file exists)
     # (if dir is goob repo)
     pass
 
-@requires_extant_file
 @requires_repo
+@requires_extant_file
 def rm(filename):
     """The given file won't be tracked in the next commit, or subsequently,
         till added again."""
@@ -162,14 +190,12 @@ def make_hash(contents, type):
     """Return hash of the contents with type prepended."""
     # type -- tr (tree), bl (blob), co(commit)
     # e.g. tr/hash(contents) for a tree
-
-    from hashlib import sha1
     return '%s%s' % (type[:2], sha1(contents).hexdigest())
 
 def save_hash(contents, hash):
     """Save the contents at the given hash. """
 
-    path = os.path.join('./.goob/objects', hash[:2], hash[2:])
+    path = os.path.join(OBJECTS_PATH, hash[:2], hash[2:])
     with open(path, 'w') as f:
         f.write(contents)
 

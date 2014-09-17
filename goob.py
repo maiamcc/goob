@@ -2,6 +2,8 @@ import os
 import inspect
 import json
 from hashlib import sha1
+from collections import defaultdict
+import re
 
 # GLOBAL PATH NAMES
 REPO_PATH = "./.goob"
@@ -64,7 +66,6 @@ def add(filename):
 
     # TODO: Add("-a") will add all files in the directory (except those in .goobignore)"""
 
-    # later: check if index contains stuff
     with open(INDEX_PATH) as f:
         try:
             index_data = json.load(f)
@@ -76,7 +77,7 @@ def add(filename):
     with open(filename) as f:
         contents = f.read()
     hash = make_hash(contents, 'blob')
-    # (hashes are unique, right?)
+    # (hashes ARE unique, right?)
 
     if filename in index_data and index_data[filename] == hash:
         raise NoChangesError("This file hasn't changed! Nothing added.")
@@ -85,14 +86,20 @@ def add(filename):
         index_data[filename] = hash
 
     with open(INDEX_PATH, 'w') as f:
-        json.dump(index_data, f)
+            json.dump(index_data, f)
 
 @requires_repo
 @requires_extant_file
 def unstage(filename):
     """If staged, the given file is unstaged."""
-    # (if file exists)
-    # (if dir is goob repo)
+    # if file is in the index
+        # if no commits yet (i.e. pointer isn't pointing to a commit)
+            # remove file from the index
+        # else
+            # if hash in index is diff. from hash in most recent commit
+                # then change hash in index to most recent commit hash
+            # else, file hasn't been staged since modification.
+    # else, throw error: "file not added yet"
     pass
 
 @requires_repo
@@ -110,8 +117,6 @@ def commit(message):
     """Makes a new commit object (with parent = current commit), representing all
         tracked files in a tree(/subtrees), with the given commit message, author,
         date, etc."""
-
-    # (if dir is goob repo)
 
     pass
 
@@ -155,52 +160,75 @@ def make_commit():
     # first, make a tree (that contains all files/subtrees)
     # then, make a commit file
     # generate text first, then save w/ save_in_hash
+
+    # OR should this just generate the content, and pass to another func to save?
     """Tree/(Parent)/Author/Timestamp/Message"""
     pass
 
-def make_tree(path_list):
+def make_tree(path_dict):
     """makes a tree file"""
     # pass in list of filepaths from index (or elsewhere)
     # for all files in filepath list, if in root dir,
         # add hash+name to tree. Else, make a new tree corresponding to
         # topmost dir (recursive function)
     # generate text first, then save w/ save_in_hash
-    pass
+    my_tree = {}
+    directories = defaultdict(dict)
 
-def make_blob(filename):
-    """Given a file, encodes, hashes, saves encoding to dir w/ name = hash."""
-    # --> save_in_hash(filecontents, "blob")
-    pass
+    for path, hash in path_dict.iteritems():
+        if os.sep in path:
+            directories[path.split(os.sep, 1)[0]][path.split(os.sep, 1)[1]] = hash
+        else:
+            my_tree[path] = hash, "blob"
 
-def update_index(filename, hash):
-    """Updates index that file of name 'filename' can be found at hash 'hash'."""
-    pass
+        for dir, filedict in directories.iteritems():
+            my_tree[dir] = make_tree(filedict), "tree"
 
-def check_if_repo():
-    """Throws an error if dir not a goob repo (i.e. if dir .goob doesn't exist)"""
-    pass
+    hash = make_hash(str(my_tree), "tree")
+    save_hash(my_tree, hash, encode=True)
+
+    return hash
 
 def lookup_by_hash(hash):
     """Returns contents of the file at given hash"""
     # given hash xxyyyyyy, look in .goob/objects/xx/yyyyyy, return contents (text)
         # when I implement contents-encoding, will need to decode here.
+        # if it's a tree or a commit, will need prettyprint method?
     pass
 
 def make_hash(contents, type):
     """Return hash of the contents with type prepended."""
     # type -- tr (tree), bl (blob), co(commit)
+        # should check if you passed a valid type? or no?
     # e.g. tr/hash(contents) for a tree
     return '%s%s' % (type[:2], sha1(contents).hexdigest())
 
-def save_hash(contents, hash):
+def save_hash(contents, hash, encode=False):
     """Save the contents at the given hash. """
 
     path = os.path.join(OBJECTS_PATH, hash[:2], hash[2:])
     with open(path, 'w') as f:
-        f.write(contents)
+        if encode:
+            json.dump(contents, f)
+        else:
+            f.write(contents)
 
     # eventually will be encoded
 
+def get_hash_from_index(filename):
+
+    with open(INDEX_PATH) as f:
+        try:
+            index_data = json.load(f)
+        except ValueError:
+            index_data = {}
+    try:
+        return index_data[filename]
+    except KeyError:
+        raise NoFileError("That file isn't in the index!")
+
+def hash_to_path(hash):
+    return os.path.join(OBJECTS_PATH, hash[:2], hash[2:])
 
 
 

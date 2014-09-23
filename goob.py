@@ -77,7 +77,6 @@ def add(filename):
     with open(filename) as f:
         contents = f.read()
     hash = make_hash(contents, 'blob')
-    # (hashes ARE unique, right?)
 
     if filename in index_data and index_data[filename] == hash:
         raise NoChangesError("This file hasn't changed! Nothing added.")
@@ -166,12 +165,8 @@ def make_commit():
     pass
 
 def make_tree(path_dict):
-    """makes a tree file"""
-    # pass in list of filepaths from index (or elsewhere)
-    # for all files in filepath list, if in root dir,
-        # add hash+name to tree. Else, make a new tree corresponding to
-        # topmost dir (recursive function)
-    # generate text first, then save w/ save_in_hash
+    """Makes a tree file and returns the hash."""
+
     my_tree = {}
     directories = defaultdict(dict)
 
@@ -184,10 +179,13 @@ def make_tree(path_dict):
         for dir, filedict in directories.iteritems():
             my_tree[dir] = make_tree(filedict), "tree"
 
-    hash = make_hash(str(my_tree), "tree")
+    hash = make_hash(str(sorted(my_tree.items())), "tree")
     save_hash(my_tree, hash, encode=True)
 
     return hash
+
+    # to prettify -- 'subdivide' func that finds everything
+        # belonging to a particular folder etc. all at once?
 
 def lookup_by_hash(hash):
     """Returns contents of the file at given hash"""

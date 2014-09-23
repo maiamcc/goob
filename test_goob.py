@@ -2,7 +2,7 @@ import unittest
 import os
 import goob
 import shutil
-import json
+import cPickle
 import tempfile
 
 class BaseTest(unittest.TestCase):
@@ -36,7 +36,7 @@ class InitTests(BaseTest):
 class testAddFunc(BaseTest):
     def assertFileAdded(self, filename):
         with open(goob.INDEX_PATH) as f:
-            index_data = json.load(f)
+            index_data = cPickle.load(f)
         self.assertIn(filename, index_data)
         hash = index_data[filename]
         path = os.path.join(goob.OBJECTS_PATH, hash[:2], hash[2:])
@@ -60,9 +60,8 @@ class testAddFunc(BaseTest):
     def test_add_changed_file_updates_index(self):
         goob.add(self.filename)
 
-        # TODO: write 'get hash from index' func
         with open(goob.INDEX_PATH) as f:
-            index_data = json.load(f)
+            index_data = cPickle.load(f)
 
         old_hash = index_data[self.filename]
 
@@ -71,7 +70,7 @@ class testAddFunc(BaseTest):
         goob.add(self.filename)
 
         with open(goob.INDEX_PATH) as f:
-            index_data = json.load(f)
+            index_data = cPickle.load(f)
 
         new_hash = index_data[self.filename]
 
@@ -126,13 +125,13 @@ class testTreeCreation(BaseTest):
 
     def test_make_tree_root_level(self):
         with open(goob.INDEX_PATH) as f:
-            index_data = json.load(f)
+            index_data = cPickle.load(f)
 
         tree_hash = goob.make_tree(index_data)
         tree_path = os.path.join(goob.OBJECTS_PATH, tree_hash[:2], tree_hash[2:])
 
         with open(tree_path) as f:
-            tree_data = json.load(f)
+            tree_data = cPickle.load(f)
 
         # check file in tree, type = blob, hash points somewhere real
         self.assertEqual(sorted(self.files), sorted(tree_data.keys()))
@@ -152,24 +151,24 @@ class testTreeCreation(BaseTest):
             goob.add(os.path.join(self.subdir0, self.subdir1, filename))
 
         with open(goob.INDEX_PATH) as f:
-            index_data = json.load(f)
+            index_data = cPickle.load(f)
         tree_hash = goob.make_tree(index_data)
         tree_path = goob.hash_to_path(tree_hash)
 
         with open(tree_path) as f:
-            tree_data = json.load(f)
+            tree_data = cPickle.load(f)
 
         subtree0_hash = tree_data[self.subdir0][0]
         subtree0_path = goob.hash_to_path(subtree0_hash)
 
         with open(subtree0_path) as f:
-            subtree0_data = json.load(f)
+            subtree0_data = cPickle.load(f)
 
         subtree1_hash = subtree0_data[self.subdir1][0]
         subtree1_path = goob.hash_to_path(subtree1_hash)
 
         with open(subtree1_path) as f:
-            subtree1_data = json.load(f)
+            subtree1_data = cPickle.load(f)
 
         for filename in self.files:
             self.assertIn(filename, tree_data)
@@ -178,6 +177,30 @@ class testTreeCreation(BaseTest):
         for filename in self.morefiles1:
             self.assertIn(filename, subtree1_data)
 
+class testCommitCreation(BaseTest):
+    def setUp(self):
+        super(testCommitCreation, self).setUp()
+        goob.init()
+        self.filename = "testfile"
+        self.contents = "contents of my testfile"
+        make_test_file(self.filename, self.contents)
+        goob.add(self.filename)
+
+    def test_encode_preserves_commit(self):
+        testCommit=goob.Commit(123,123,"345","#45","435546")
+        testCommit.save()
+        decoded=goob.lookup_by_hash(testCommit.__hash__())
+        self.assertEqual(testCommit,decoded)
+
+    def test_commit_includes_expected_file(self):
+        message = "testing commit"
+        goob.make_commit(message)
+
+        retrieved_commit = goob.lookup_by_hash(goob.get_cur_head())
+        tree_data = goob.lookup_by_hash(retrieved_commit.tree_hash)
+
+        self.assertIn(self.filename, tree_data)
+        self.assertEqual(goob.lookup_by_hash(tree_data[self.filename][0]), self.contents)
 
 # UTILITY FUNCTIONS
 

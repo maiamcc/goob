@@ -1,9 +1,10 @@
 import os
 import inspect
-import json
+import cPickle
 from hashlib import sha1
 from collections import defaultdict
 import re
+import time
 
 # GLOBAL PATH NAMES
 REPO_PATH = "./.goob"
@@ -68,8 +69,8 @@ def add(filename):
 
     with open(INDEX_PATH) as f:
         try:
-            index_data = json.load(f)
-        except ValueError:
+            index_data = cPickle.load(f)
+        except EOFError:
             index_data = {}
 
     # index format: dict where index[filename] = hashhashash
@@ -85,7 +86,7 @@ def add(filename):
         index_data[filename] = hash
 
     with open(INDEX_PATH, 'w') as f:
-            json.dump(index_data, f)
+            cPickle.dump(index_data, f)
 
 @requires_repo
 @requires_extant_file
@@ -154,15 +155,51 @@ def diff(file1, file2):
     """If the files are at all different, return True. Otherwise, false."""
     pass
 
-def make_commit():
-    """makes a commit file"""
-    # first, make a tree (that contains all files/subtrees)
-    # then, make a commit file
-    # generate text first, then save w/ save_in_hash
+class Commit(object):
+    def __init__(self, tree_hash, timestamp, msg, parent=None, author="ME!"):
+        self.tree_hash = tree_hash
+        self.timestamp = timestamp
+        self.msg = msg
+        self.parent = parent
+        self.author = author
 
-    # OR should this just generate the content, and pass to another func to save?
-    """Tree/(Parent)/Author/Timestamp/Message"""
-    pass
+    def __str__(self):
+        return "Tree: %s\nTimestamp: %s\nMessage: %s\nParent: %s\nAuthor: %s" % (self.tree_hash, self.timestamp, self.msg, self.parent, self.author)
+
+    def __hash__(self):
+        return make_hash(str(self), "commit")
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self.__dict__ == other.__dict__
+        else:
+            return False
+
+    def save(self):
+        commit_hash = self.__hash__()
+        save_hash(self, commit_hash)
+
+def make_commit(msg):
+    """makes a commit file"""
+    with open(INDEX_PATH) as f:
+        index_data = cPickle.load(f)
+
+    tree_hash = make_tree(index_data)
+    timestamp = time.ctime()
+    parent = get_cur_head()
+
+    new_commit = Commit(tree_hash, timestamp, msg, parent)
+    new_commit.save()
+    update_head(new_commit.__hash__())
+
+
+def get_cur_head():
+    with open(POINTER_PATH) as f:
+        return f.read()
+
+def update_head(commit_hash):
+    with open(POINTER_PATH, "w") as f:
+        f.write(commit_hash)
 
 def make_tree(path_dict):
     """Makes a tree file and returns the hash."""
@@ -180,7 +217,7 @@ def make_tree(path_dict):
             my_tree[dir] = make_tree(filedict), "tree"
 
     hash = make_hash(str(sorted(my_tree.items())), "tree")
-    save_hash(my_tree, hash, encode=True)
+    save_hash(my_tree, hash)
 
     return hash
 
@@ -192,7 +229,10 @@ def lookup_by_hash(hash):
     # given hash xxyyyyyy, look in .goob/objects/xx/yyyyyy, return contents (text)
         # when I implement contents-encoding, will need to decode here.
         # if it's a tree or a commit, will need prettyprint method?
-    pass
+    path=hash_to_path(hash)
+    with open(path) as f:
+        return cPickle.load(f)
+
 
 def make_hash(contents, type):
     """Return hash of the contents with type prepended."""
@@ -201,15 +241,12 @@ def make_hash(contents, type):
     # e.g. tr/hash(contents) for a tree
     return '%s%s' % (type[:2], sha1(contents).hexdigest())
 
-def save_hash(contents, hash, encode=False):
+def save_hash(contents, hash):
     """Save the contents at the given hash. """
 
     path = os.path.join(OBJECTS_PATH, hash[:2], hash[2:])
     with open(path, 'w') as f:
-        if encode:
-            json.dump(contents, f)
-        else:
-            f.write(contents)
+        cPickle.dump(contents, f)
 
     # eventually will be encoded
 
@@ -217,8 +254,8 @@ def get_hash_from_index(filename):
 
     with open(INDEX_PATH) as f:
         try:
-            index_data = json.load(f)
-        except ValueError:
+            index_data = cPickle.load(f)
+        except EOFError:
             index_data = {}
     try:
         return index_data[filename]
@@ -229,9 +266,9 @@ def hash_to_path(hash):
     return os.path.join(OBJECTS_PATH, hash[:2], hash[2:])
 
 
-
-
 ### USEFUL COMMANDS
 # os.path.: exists / isfile / isdir
 # os.mkdir (makes directory)
+
+# different sub-programs per command?
 

@@ -35,8 +35,7 @@ class InitTests(BaseTest):
 
 class testAddFunc(BaseTest):
     def assertFileAdded(self, filename):
-        with open(goob.INDEX_PATH) as f:
-            index_data = cPickle.load(f)
+        index_data = goob.read_index()
         self.assertIn(filename, index_data)
         hash = index_data[filename]
         path = os.path.join(goob.OBJECTS_PATH, hash[:2], hash[2:])
@@ -60,8 +59,7 @@ class testAddFunc(BaseTest):
     def test_add_changed_file_updates_index(self):
         goob.add(self.filename)
 
-        with open(goob.INDEX_PATH) as f:
-            index_data = cPickle.load(f)
+        index_data = goob.read_index()
 
         old_hash = index_data[self.filename]
 
@@ -69,8 +67,7 @@ class testAddFunc(BaseTest):
 
         goob.add(self.filename)
 
-        with open(goob.INDEX_PATH) as f:
-            index_data = cPickle.load(f)
+        index_data = goob.read_index()
 
         new_hash = index_data[self.filename]
 
@@ -79,15 +76,13 @@ class testAddFunc(BaseTest):
         self.assertEqual(len(index_data), 1)
 
     def test_add_multiple_files(self):
-        # TODO: use make test file here
-        second_contents = "contents of another, different testfile"
-        with open("second_testfile", 'w') as f:
-            f.write(second_contents)
+        self.filename2 = "testfile2"
+        make_test_file(self.filename2, "contents of another, different testfile")
 
-        goob.add("testfile")
-        goob.add("second_testfile")
-        self.assertFileAdded("testfile")
-        self.assertFileAdded("second_testfile")
+        goob.add(self.filename)
+        goob.add(self.filename2)
+        self.assertFileAdded(self.filename)
+        self.assertFileAdded(self.filename2)
 
 class DecoratorTests(BaseTest):
     def test_run_command_fails_when_repo_not_initialized(self):
@@ -124,14 +119,11 @@ class testTreeCreation(BaseTest):
             goob.add(filename)
 
     def test_make_tree_root_level(self):
-        with open(goob.INDEX_PATH) as f:
-            index_data = cPickle.load(f)
+        index_data = goob.read_index()
 
         tree_hash = goob.make_tree(index_data)
-        tree_path = os.path.join(goob.OBJECTS_PATH, tree_hash[:2], tree_hash[2:])
 
-        with open(tree_path) as f:
-            tree_data = cPickle.load(f)
+        tree_data = goob.read_hash(tree_hash)
 
         # check file in tree, type = blob, hash points somewhere real
         self.assertEqual(sorted(self.files), sorted(tree_data.keys()))
@@ -150,25 +142,16 @@ class testTreeCreation(BaseTest):
             make_test_file(os.path.join(self.subdir0, self.subdir1, filename), "contents of file %s" % filename)
             goob.add(os.path.join(self.subdir0, self.subdir1, filename))
 
-        with open(goob.INDEX_PATH) as f:
-            index_data = cPickle.load(f)
-        tree_hash = goob.make_tree(index_data)
-        tree_path = goob.hash_to_path(tree_hash)
+        index_data = goob.read_index()
 
-        with open(tree_path) as f:
-            tree_data = cPickle.load(f)
+        tree_hash = goob.make_tree(index_data)
+        tree_data = goob.read_hash(tree_hash)
 
         subtree0_hash = tree_data[self.subdir0][0]
-        subtree0_path = goob.hash_to_path(subtree0_hash)
-
-        with open(subtree0_path) as f:
-            subtree0_data = cPickle.load(f)
+        subtree0_data = goob.read_hash(subtree0_hash)
 
         subtree1_hash = subtree0_data[self.subdir1][0]
-        subtree1_path = goob.hash_to_path(subtree1_hash)
-
-        with open(subtree1_path) as f:
-            subtree1_data = cPickle.load(f)
+        subtree1_data = goob.read_hash(subtree1_hash)
 
         for filename in self.files:
             self.assertIn(filename, tree_data)
@@ -189,18 +172,18 @@ class testCommitCreation(BaseTest):
     def test_encode_preserves_commit(self):
         testCommit=goob.Commit(123,123,"345","#45","435546")
         testCommit.save()
-        decoded=goob.lookup_by_hash(testCommit.__hash__())
+        decoded=goob.read_hash(testCommit.__hash__())
         self.assertEqual(testCommit,decoded)
 
     def test_commit_includes_expected_file(self):
         message = "testing commit"
         goob.make_commit(message)
 
-        retrieved_commit = goob.lookup_by_hash(goob.get_cur_head())
-        tree_data = goob.lookup_by_hash(retrieved_commit.tree_hash)
+        retrieved_commit = goob.read_hash(goob.get_cur_head())
+        tree_data = goob.read_hash(retrieved_commit.tree_hash)
 
         self.assertIn(self.filename, tree_data)
-        self.assertEqual(goob.lookup_by_hash(tree_data[self.filename][0]), self.contents)
+        self.assertEqual(goob.read_hash(tree_data[self.filename][0]), self.contents)
 
 # UTILITY FUNCTIONS
 

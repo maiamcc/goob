@@ -67,11 +67,7 @@ def add(filename):
 
     # TODO: Add("-a") will add all files in the directory (except those in .goobignore)"""
 
-    with open(INDEX_PATH) as f:
-        try:
-            index_data = cPickle.load(f)
-        except EOFError:
-            index_data = {}
+    index_data = read_index()
 
     # index format: dict where index[filename] = hashhashash
 
@@ -85,8 +81,7 @@ def add(filename):
         save_hash(contents, hash)
         index_data[filename] = hash
 
-    with open(INDEX_PATH, 'w') as f:
-            cPickle.dump(index_data, f)
+    write_index(index_data)
 
 @requires_repo
 @requires_extant_file
@@ -181,8 +176,7 @@ class Commit(object):
 
 def make_commit(msg):
     """makes a commit file"""
-    with open(INDEX_PATH) as f:
-        index_data = cPickle.load(f)
+    index_data = read_index()
 
     tree_hash = make_tree(index_data)
     timestamp = time.ctime()
@@ -224,7 +218,7 @@ def make_tree(path_dict):
     # to prettify -- 'subdivide' func that finds everything
         # belonging to a particular folder etc. all at once?
 
-def lookup_by_hash(hash):
+def read_hash(hash):
     """Returns contents of the file at given hash"""
     # given hash xxyyyyyy, look in .goob/objects/xx/yyyyyy, return contents (text)
         # when I implement contents-encoding, will need to decode here.
@@ -232,7 +226,6 @@ def lookup_by_hash(hash):
     path=hash_to_path(hash)
     with open(path) as f:
         return cPickle.load(f)
-
 
 def make_hash(contents, type):
     """Return hash of the contents with type prepended."""
@@ -265,6 +258,19 @@ def get_hash_from_index(filename):
 def hash_to_path(hash):
     return os.path.join(OBJECTS_PATH, hash[:2], hash[2:])
 
+def read_index():
+    """Returns the contents of the INDEX file. If INDEX is empty, returns an empty dict."""
+    with open(INDEX_PATH) as f:
+        try:
+            index_data = cPickle.load(f)
+        except EOFError:
+            index_data = {}
+    return index_data
+
+def write_index(contents):
+    """Writes 'contents' (presumably a dict. of filenames and hashes) to INDEX file."""
+    with open(INDEX_PATH, 'w') as f:
+            cPickle.dump(contents, f)
 
 ### USEFUL COMMANDS
 # os.path.: exists / isfile / isdir

@@ -136,7 +136,10 @@ class DecoratorTests(BaseTest):
         with self.assertRaises(goob.NoRepoError) as e:
             goob.add('foo')
 
-    # TODO test my other decorator too
+    def test_run_command_fails_when_nonexistant_file(self):
+        goob.init()
+        with self.assertRaises(goob.NoFileError) as e:
+            goob.add('foo')
 
 class testGetHashFromIndex(BaseTest):
     def setUp(self):

@@ -84,12 +84,59 @@ class testAddFunc(BaseTest):
         self.assertFileAdded(self.filename)
         self.assertFileAdded(self.filename2)
 
+class testRmFunc(BaseTest):
+    def setUp(self):
+        super(testRmFunc, self).setUp()
+        goob.init()
+        self.filename = "testfile"
+        self.contents = "contents of my testfile"
+        self.filename2 = "testfile2"
+        self.contents2 = "this file should remain untouched"
+        make_test_file(self.filename, self.contents)
+        make_test_file(self.filename2, self.contents2)
+        goob.add(self.filename)
+
+    def test_rm_del_file_and_removes_from_index(self):
+        goob.rm(self.filename)
+
+        index_data = goob.read_index()
+        self.assertNotIn(self.filename, index_data)
+        self.assertFalse(os.path.exists(self.filename))
+
+    def test_rm_cached_only_removes_from_index(self):
+        goob.rm(self.filename, cached=True)
+
+        index_data = goob.read_index()
+        self.assertNotIn(self.filename, index_data)
+        # but file should still exist
+        self.assertTrue(os.path.exists(self.filename))
+
+    def test_rm_nonadded_file_throws_error(self):
+        with self.assertRaises(goob.NoFileError) as e:
+            goob.rm(self.filename2)
+        self.assertTrue(os.path.exists(self.filename2))
+    def test_rm_doesnt_affect_other_files(self):
+        goob.add(self.filename2)
+        goob.rm(self.filename)
+
+        index_data = goob.read_index()
+        self.assertIn(self.filename2, index_data)
+        self.assertTrue(os.path.exists(self.filename2))
+
+    def test_rm_cached_doesnt_affect_other_files(self):
+        goob.add(self.filename2)
+        goob.rm(self.filename, cached=True)
+
+        index_data = goob.read_index()
+        self.assertIn(self.filename2, index_data)
+        self.assertTrue(os.path.exists(self.filename2))
+
 class DecoratorTests(BaseTest):
     def test_run_command_fails_when_repo_not_initialized(self):
         with self.assertRaises(goob.NoRepoError) as e:
             goob.add('foo')
 
-    # test my other decorator too
+    # TODO test my other decorator too
 
 class testGetHashFromIndex(BaseTest):
     def setUp(self):
@@ -108,6 +155,35 @@ class testGetHashFromIndex(BaseTest):
     def test_file_not_in_index_raises_error(self):
         with self.assertRaises(goob.NoFileError) as e:
             goob.get_hash_from_index("nonexistant")
+
+class testGetHashOfFileContents(BaseTest):
+    def setUp(self):
+        super(testGetHashOfFileContents, self).setUp()
+        goob.init()
+        self.filename = "testfile"
+        self.contents = "contents of my testfile"
+        make_test_file(self.filename, self.contents)
+
+    def runTest(self):
+        self.assertEqual(goob.get_hash_of_file_contents(self.filename), goob.make_hash(self.contents, "blob"))
+
+class testReadHash(BaseTest):
+    def setUp(self):
+        super(testReadHash, self).setUp()
+        goob.init()
+        self.filename = "testfile"
+        self.contents = "contents of my testfile"
+        make_test_file(self.filename, self.contents)
+        goob.add(self.filename)
+
+    def test_returns_correct_contents(self):
+        file_hash = goob.make_hash(self.contents, "blob")
+        returned_content = goob.read_hash(file_hash)
+        self.assertEqual(returned_content, self.contents)
+
+    def test_nonexistant_hash_raises_error(self):
+        with self.assertRaises(goob.BadHashError) as e:
+            goob.read_hash("garuebidwjaofefaef")
 
 class testTreeCreation(BaseTest):
     def setUp(self):
@@ -159,6 +235,48 @@ class testTreeCreation(BaseTest):
             self.assertIn(filename, subtree0_data)
         for filename in self.morefiles1:
             self.assertIn(filename, subtree1_data)
+
+class testLookupInTree(BaseTest):
+    def setUp(self):
+        super(testLookupInTree, self).setUp()
+        goob.init()
+
+    def test_zero_levels_deep(self):
+        self.filename = "testfile"
+        self.contents = "contents of my testfile"
+        make_test_file(self.filename, self.contents)
+        goob.add(self.filename)
+
+        tree_hash = goob.make_tree(goob.read_index())
+        found_hash = goob.lookup_in_tree(self.filename, tree_hash)
+        self.assertEqual(found_hash, goob.make_hash(self.contents, "blob"))
+
+    def test_one_level_deep(self):
+        self.subdir0 = "foo"
+        os.mkdir(self.subdir0)
+        self.filename = os.path.join(self.subdir0, "testfile")
+        self.contents = "contents of my testfile"
+        make_test_file(self.filename, self.contents)
+        goob.add(self.filename)
+
+        tree_hash = goob.make_tree(goob.read_index())
+        found_hash = goob.lookup_in_tree(self.filename, tree_hash)
+        self.assertEqual(found_hash, goob.make_hash(self.contents, "blob"))
+
+    def test_two_levels_deep(self):
+        self.subdir0 = "foo"
+        self.subdir1 = "bar"
+        os.mkdir(self.subdir0)
+        os.mkdir(os.path.join(self.subdir0, self.subdir1))
+        self.filename = os.path.join(self.subdir0, self.subdir1, "testfile")
+        self.contents = "contents of my testfile"
+        make_test_file(self.filename, self.contents)
+        goob.add(self.filename)
+
+        tree_hash = goob.make_tree(goob.read_index())
+        found_hash = goob.lookup_in_tree(self.filename, tree_hash)
+        self.assertEqual(found_hash, goob.make_hash(self.contents, "blob"))
+
 
 class testCommitCreation(BaseTest):
     def setUp(self):

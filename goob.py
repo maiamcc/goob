@@ -25,22 +25,23 @@ class NoRepoError(GoobError): pass
 class RepoExistsError(GoobError): pass
 class NoFileError(GoobError): pass
 class NoChangesError(GoobError): pass
+class BadHashError(GoobError): pass
 
 ## DECORATORS
 def requires_repo(func):
-    def checked_func(*args):
+    def checked_func(*args, **kwargs):
         if os.path.exists(REPO_PATH):
-            return func(*args)
+            return func(*args, **kwargs)
         else:
-            raise NoRepoError("Not a goob repo!")
+            raise NoRepoError("Not a goob repo.")
     return checked_func
 
 def requires_extant_file(func):
-    def checked_func(filename, *args):
+    def checked_func(filename, *args, **kwargs):
         if os.path.exists(filename):
-            return func(filename, *args)
+            return func(filename, *args, **kwargs)
         else:
-            raise NoFileError("File does not exist!")
+            raise NoFileError("File does not exist.")
     return checked_func
 
 ## USER COMMANDS
@@ -49,7 +50,7 @@ def init():
         it with the relevant stuff"""
 
     if os.path.exists(REPO_PATH):
-        raise RepoExistsError("This is already a goob repo!")
+        raise RepoExistsError("This is already a goob repo.")
     else:
         os.mkdir(REPO_PATH)
         os.mkdir(OBJECTS_PATH)
@@ -76,7 +77,7 @@ def add(filename):
     hash = make_hash(contents, 'blob')
 
     if filename in index_data and index_data[filename] == hash:
-        raise NoChangesError("This file hasn't changed! Nothing added.")
+        raise NoChangesError("This file hasn't changed. Nothing added.")
     else:
         save_hash(contents, hash)
         index_data[filename] = hash
@@ -85,27 +86,19 @@ def add(filename):
 
 @requires_repo
 @requires_extant_file
-def unstage(filename):
-    """If staged, the given file is unstaged."""
-    # if file is in the index
-        # if no commits yet (i.e. pointer isn't pointing to a commit)
-            # remove file from the index
-        # else
-            # if hash in index is diff. from hash in most recent commit
-                # then change hash in index to most recent commit hash
-            # else, file hasn't been staged since modification.
-    # else, throw error: "file not added yet"
-    pass
+def rm(filename, cached=False):
+    """If not 'cached': removes file from index and deletes the file. If 'cached':
+        removes file from index but does not delete the file."""
 
-@requires_repo
-@requires_extant_file
-def rm(filename):
-    """The given file won't be tracked in the next commit, or subsequently,
-        till added again."""
-
-    # (if file exists)
-    # (if dir is goob repo)
-    pass
+    index_data = read_index()
+    try:
+        del index_data[filename]
+    except KeyError:
+        raise NoFileError("%s isn't staged" % filename)
+    else:
+        write_index(index_data)
+        if not cached:
+            os.remove(filename)
 
 @requires_repo
 def commit(message):
@@ -113,7 +106,8 @@ def commit(message):
         tracked files in a tree(/subtrees), with the given commit message, author,
         date, etc."""
 
-    pass
+    # QUESTION: does this control flow make sense?
+    make_commit(message)
 
 @requires_repo
 def status():
@@ -135,9 +129,8 @@ def checkout(commit_hash):
 @requires_repo
 def list_files():
     """Lists all of the files being tracked by goob (from .goob/index)"""
-
-    # (if dir is goob repo)
-    pass
+    index_data = read_index
+    print "\n".join(sorted(index_data.keys()))
 
 # Files I need
 # .goobignore file = this file will tell you which thigns to ignore (i.e. not add)
@@ -186,7 +179,6 @@ def make_commit(msg):
     new_commit.save()
     update_head(new_commit.__hash__())
 
-
 def get_cur_head():
     with open(POINTER_PATH) as f:
         return f.read()
@@ -207,8 +199,8 @@ def make_tree(path_dict):
         else:
             my_tree[path] = hash, "blob"
 
-        for dir, filedict in directories.iteritems():
-            my_tree[dir] = make_tree(filedict), "tree"
+    for dir, filedict in directories.iteritems():
+        my_tree[dir] = make_tree(filedict), "tree"
 
     hash = make_hash(str(sorted(my_tree.items())), "tree")
     save_hash(my_tree, hash)
@@ -223,14 +215,17 @@ def read_hash(hash):
     # given hash xxyyyyyy, look in .goob/objects/xx/yyyyyy, return contents (text)
         # when I implement contents-encoding, will need to decode here.
         # if it's a tree or a commit, will need prettyprint method?
-    path=hash_to_path(hash)
-    with open(path) as f:
-        return cPickle.load(f)
+    try:
+        path = hash_to_path(hash)
+        with open(path) as f:
+            return cPickle.load(f)
+    except IOError:
+        raise BadHashError("No file exists at this hash.")
 
 def make_hash(contents, type):
     """Return hash of the contents with type prepended."""
     # type -- tr (tree), bl (blob), co(commit)
-        # should check if you passed a valid type? or no?
+        # TODO: should check if you passed a valid type? or no?
     # e.g. tr/hash(contents) for a tree
     return '%s%s' % (type[:2], sha1(contents).hexdigest())
 
@@ -241,7 +236,11 @@ def save_hash(contents, hash):
     with open(path, 'w') as f:
         cPickle.dump(contents, f)
 
-    # eventually will be encoded
+def get_hash_of_file_contents(filename, type="blob"):
+    """Returns a hash of the contents of the given file. Assumes a blob."""
+    with open(filename) as f:
+        contents = f.read()
+    return make_hash(contents, type)
 
 def get_hash_from_index(filename):
 
@@ -253,7 +252,7 @@ def get_hash_from_index(filename):
     try:
         return index_data[filename]
     except KeyError:
-        raise NoFileError("That file isn't in the index!")
+        raise NoFileError("That file isn't in the index.")
 
 def hash_to_path(hash):
     return os.path.join(OBJECTS_PATH, hash[:2], hash[2:])
@@ -272,9 +271,26 @@ def write_index(contents):
     with open(INDEX_PATH, 'w') as f:
             cPickle.dump(contents, f)
 
+def lookup_in_tree(filename, tree_hash):
+    """Searches given tree and its subtrees for the given filename, returns file's hash."""
+    # currently expects the full file-path rather than just the file name: maybe a
+        # separate function to seach tree for a specific filename?
+    tree_data = read_hash(tree_hash)
+    if os.sep in filename:
+        subtree_data = tree_data
+        while os.sep in filename:
+            subtree_data = read_hash(subtree_data[filename.split(os.sep, 1)[0]][0])
+            filename = filename.split(os.sep, 1)[1]
+        found_hash = subtree_data[filename][0]
+    else:
+        found_hash = tree_data[filename][0]
+
+    return found_hash
+
 ### USEFUL COMMANDS
 # os.path.: exists / isfile / isdir
 # os.mkdir (makes directory)
 
 # different sub-programs per command?
+# TODO: currently goob only runs from the root dir of the project. Should fix this.
 

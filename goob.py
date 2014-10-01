@@ -5,6 +5,7 @@ from hashlib import sha1
 from collections import defaultdict
 import re
 import time
+from color import colors
 
 # GLOBAL PATH NAMES
 REPO_PATH = "./.goob"
@@ -112,12 +113,78 @@ def commit(message):
 @requires_repo
 def status():
     """Displays untracked files, modified files, unmodified files."""
-    # untracked = files in dir not in index (or goobignore)
-    # modified = files in index: the version saved as a blob (find the hash in index) is DIFFERENT from version in dir
-    # unmodified = all other files in index
+    # changes to be committed:
+        # new file = file added to index but not in previous commit
+        # modified_added = file in index with different hash from its hash in previous commit but same hash as its hash in the index
+        # removed = file in last commit not currently in index
+    # changes not staged for commit:
+        # modified_not_added = files in index and in last commit, file's hash is diff from hash in index
+        # untracked = file in dir not in index (or goobignore)
+        # deleted = file in the index not in the directory
+            # ^^^ need to change how 'add' deals with this^^^
+    new, modified_added, removed, modified_not_added, untracked, deleted = [], [],[],[],[],[]
 
-    # (if dir is goob repo)
-    pass
+    # TODO: work in GOOBIGNORE
+    all_files = [os.path.join(root, file)[2:] for root, dirs, files in os.walk(".") \
+        for file in files if not ".goob" in root]
+
+    index_data = read_index()
+
+    try:
+        cur_commit = read_hash(get_cur_head())
+    except BadHashError:
+        cur_commit = None
+
+    for filename in all_files: # for every file in directory
+        if filename not in index_data: # if not in index:
+            if lookup_in_tree(filename, cur_commit.tree_hash): # if in last commit:
+                removed.append(filename)
+            else:
+                untracked.append(filename)
+        else:
+            hash_in_commit = lookup_in_tree(filename, cur_commit.tree_hash)
+            file_hash = get_hash_of_file_contents(filename)
+            if hash_in_commit: # if in previous commit:
+                if file_hash != index_data[filename]: # if hash of file diff from its hash in index
+                    modified_not_added.append(filename)
+                elif file_hash != hash_in_commit: # if hash of file (= hash in index) diff from hash in commit:
+                    modified_added.append(filename)
+                else:
+                    # unchanged -- no action
+                    pass
+            else:
+                new.append(filename)
+
+    files_in_cur_commit = walk_tree(cur_commit.tree_hash)
+    for filename in set(files_in_cur_commit).difference(set(all_files)):
+        if filename in index_data:
+            deleted.append(filename) # uncommited delete (deleted)
+        else:
+            removed.append(filename) # committed delete (removed)
+
+
+    #TODO: pretty colors here
+
+    print "Changes to be committed:" + colors.GREEN
+    for filename in new:
+        print "\tNew file:", filename
+    for filename in modified_added:
+        print "\tModified:", filename
+    for filename in removed:
+        print "\tDeleted:", filename
+    print colors.ENDC + "Changes not staged for commit:" + colors.RED
+    for filename in modified_not_added:
+        print "\tModified:", filename
+    for filename in deleted:
+        print "\tDeleted:", filename
+    print colors.ENDC + "Untracked files:" + colors.RED
+    for filename in untracked:
+        print "\t" + filename
+    print colors.ENDC
+
+    # for every file in index:
+        # if not in directory:
+            # deleted
 
 @requires_repo
 def checkout(commit_hash):
@@ -278,14 +345,37 @@ def lookup_in_tree(filename, tree_hash):
     tree_data = read_hash(tree_hash)
     if os.sep in filename:
         subtree_data = tree_data
-        while os.sep in filename:
-            subtree_data = read_hash(subtree_data[filename.split(os.sep, 1)[0]][0])
-            filename = filename.split(os.sep, 1)[1]
-        found_hash = subtree_data[filename][0]
+        try:
+            while os.sep in filename:
+                subtree_data = read_hash(subtree_data[filename.split(os.sep, 1)[0]][0])
+                filename = filename.split(os.sep, 1)[1]
+            found_hash = subtree_data[filename][0]
+        except KeyError:
+            found_hash = None
     else:
-        found_hash = tree_data[filename][0]
+        try:
+            found_hash = tree_data[filename][0]
+        except KeyError:
+            found_hash = None
 
     return found_hash
+
+def walk_tree(tree_hash, prefix=None):
+    """Given a tree, returns a list of files in that tree and all subtrees."""
+    results = []
+    for filename, (hash, obj_type) in read_hash(tree_hash).iteritems():
+        if obj_type == "blob":
+            if prefix:
+                results.append(os.path.join(prefix, filename))
+            else:
+                results.append(filename)
+        else:
+            if prefix:
+                results.extend(walk_tree(hash, prefix=os.path.join(prefix,filename)))
+            else:
+                results.extend(walk_tree(hash, prefix=filename))
+    return results
+
 
 ### USEFUL COMMANDS
 # os.path.: exists / isfile / isdir
@@ -293,4 +383,5 @@ def lookup_in_tree(filename, tree_hash):
 
 # different sub-programs per command?
 # TODO: currently goob only runs from the root dir of the project. Should fix this.
+# for later: colors! (http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python)
 

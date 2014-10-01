@@ -4,6 +4,8 @@ import goob
 import shutil
 import cPickle
 import tempfile
+import pudb
+from color import colors
 
 class BaseTest(unittest.TestCase):
     def setUp(self):
@@ -280,6 +282,10 @@ class testLookupInTree(BaseTest):
         found_hash = goob.lookup_in_tree(self.filename, tree_hash)
         self.assertEqual(found_hash, goob.make_hash(self.contents, "blob"))
 
+    def test_return_none_if_file_not_in_tree(self):
+        tree_hash = goob.make_tree(goob.read_index())
+        found_hash = goob.lookup_in_tree("nofile", tree_hash)
+        self.assertIsNone(found_hash)
 
 class testCommitCreation(BaseTest):
     def setUp(self):
@@ -306,11 +312,73 @@ class testCommitCreation(BaseTest):
         self.assertIn(self.filename, tree_data)
         self.assertEqual(goob.read_hash(tree_data[self.filename][0]), self.contents)
 
+class testStatusFunc(BaseTest):
+    def setUp(self):
+        super(testStatusFunc, self).setUp()
+        goob.init()
+
+    def test_status(self):
+        self.files = ["new_file", "modify_and_add_me",  "just_modify_me", "remove_me", "remove_me_cached", "delete_me_in_dir", "untracked_file"]
+        for filename in self.files:
+            make_test_file(filename, "this is the file %s" % filename)
+
+        goob.add("modify_and_add_me")
+        goob.add("just_modify_me")
+        goob.add("remove_me")
+        goob.add("remove_me_cached")
+        goob.add("delete_me_in_dir")
+        goob.commit("first commit")
+
+        goob.rm("remove_me")
+        goob.rm("remove_me_cached", cached=True)
+        os.remove("delete_me_in_dir")
+
+        make_test_file("modify_and_add_me", "the contents of this file have been modified")
+        make_test_file("just_modify_me", "this file has been modified as well")
+        goob.add("modify_and_add_me")
+
+        goob.add("new_file")
+
+        print "\n"
+        goob.status()
+class testWalkTree(BaseTest):
+    def runTest(self):
+        goob.init()
+        make_lotsa_test_files()
+        goob.commit("first commit")
+
+        cur_commit = goob.read_hash(goob.get_cur_head())
+        tree_walk = goob.walk_tree(cur_commit.tree_hash)
+
+        #TODO finish this test
+
 # UTILITY FUNCTIONS
 
 def make_test_file(filename, contents):
     with open(filename, 'w') as f:
         f.write(contents)
+
+def make_lotsa_test_files(add_all=True):
+    subdir0 = "foo"
+    subdir1 = "bar"
+    os.mkdir(subdir0)
+    os.mkdir(os.path.join(subdir0, subdir1))
+    files = ["a", "b", "c"]
+    morefiles0 = ["d", "e", "f"]
+    morefiles1 = ["g", "h", "i"]
+    for filename in files:
+        make_test_file(filename, "contents of file %s" % filename)
+    for filename in morefiles0:
+        make_test_file(os.path.join(subdir0, filename), "contents of file %s" % filename)
+    for filename in morefiles1:
+        make_test_file(os.path.join(subdir0, subdir1, filename), "contents of file %s" % filename)
+    if add_all:
+        for filename in files:
+            goob.add(filename)
+        for filename in morefiles0:
+            goob.add(os.path.join(subdir0, filename))
+        for filename in morefiles1:
+            goob.add(os.path.join(subdir0, subdir1, filename))
 
 if __name__ == '__main__':
     unittest.main()

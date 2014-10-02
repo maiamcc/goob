@@ -343,11 +343,13 @@ class testStatusFunc(BaseTest):
 class testWalkTree(BaseTest):
     def runTest(self):
         goob.init()
-        make_lotsa_test_files()
+        files_made = make_lotsa_test_files()
         goob.commit("first commit")
 
         cur_commit = goob.read_hash(goob.get_cur_head())
         tree_walk = goob.walk_tree(cur_commit.tree_hash)
+
+        self.assertEqual(set(tree_walk), set(files_made))
 
         #TODO finish this test
 
@@ -365,12 +367,17 @@ def make_lotsa_test_files(add_all=True):
     files = ["a", "b", "c"]
     morefiles0 = ["d", "e", "f"]
     morefiles1 = ["g", "h", "i"]
+    files_made = []
     for filename in files:
         make_test_file(filename, "contents of file %s" % filename)
+        files_made.append(filename)
     for filename in morefiles0:
         make_test_file(os.path.join(subdir0, filename), "contents of file %s" % filename)
+        files_made.append(os.path.join(subdir0, filename))
     for filename in morefiles1:
         make_test_file(os.path.join(subdir0, subdir1, filename), "contents of file %s" % filename)
+        files_made.append(os.path.join(subdir0, subdir1, filename))
+
     if add_all:
         for filename in files:
             goob.add(filename)
@@ -378,6 +385,8 @@ def make_lotsa_test_files(add_all=True):
             goob.add(os.path.join(subdir0, filename))
         for filename in morefiles1:
             goob.add(os.path.join(subdir0, subdir1, filename))
+
+    return files_made
 
 if __name__ == '__main__':
     unittest.main()

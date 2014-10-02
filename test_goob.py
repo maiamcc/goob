@@ -338,8 +338,19 @@ class testStatusFunc(BaseTest):
 
         goob.add("new_file")
 
-        print "\n"
-        goob.status()
+        # print "\n"
+        # returned_status = goob.status()
+
+        expected_status = goob.Status(new=["new_file"],
+                            modified_added=["modify_and_add_me"],
+                            removed=["remove_me", "remove_me_cached"],
+                            modified_not_added=["just_modify_me"],
+                            untracked=["untracked_file"],
+                            deleted=["delete_me_in_dir"])
+
+        self.assertEqual(expected_status, returned_status)
+
+
 class testWalkTree(BaseTest):
     def runTest(self):
         goob.init()
@@ -350,8 +361,6 @@ class testWalkTree(BaseTest):
         tree_walk = goob.walk_tree(cur_commit.tree_hash)
 
         self.assertEqual(set(tree_walk), set(files_made))
-
-        #TODO finish this test
 
 # UTILITY FUNCTIONS
 

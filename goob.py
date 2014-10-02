@@ -112,6 +112,39 @@ def commit(message):
     # QUESTION: does this control flow make sense?
     make_commit(message)
 
+class Status(object):
+    def __init__(self, new=[], modified_added=[], removed=[], modified_not_added=[], untracked=[], deleted=[]):
+        self.new = new
+        self.modified_added = modified_added
+        self.removed = removed
+        self.modified_not_added = modified_not_added
+        self.untracked = untracked
+        self.deleted = deleted
+
+    def __str__(self):
+        results = []
+        results.append("Changes to be committed:" + colors.GREEN)
+        results.extend([("\tNew file: %s" % filename) for filename in self.new])
+        results.extend([("\tModified: %s" % filename) for filename in self.modified_added])
+        results.extend([("\tDeleted: %s" % filename) for filename in self.removed])
+        results.append(colors.ENDC + "Changes not staged for commit:" + colors.RED)
+        results.extend([("\tModified: %s" % filename) for filename in self.modified_not_added])
+        results.extend([("\tDeleted: %s" % filename) for filename in self.deleted])
+        results.append(colors.ENDC + "Untracked files:" + colors.RED)
+        results.extend([("\t%s" % filename) for filename in self.untracked])
+        results.append(colors.ENDC)
+        return "\n".join(results)
+
+    def __eq__(self, other):
+        if type(self) == type(other):
+            for attr, val in vars(self).iteritems():
+                if set(val) != set(other.__getattribute__(attr)):
+                    return False
+                return True
+        else:
+            return False
+
+
 @requires_repo
 def status():
     """Displays untracked files, modified files, unmodified files."""
@@ -127,6 +160,8 @@ def status():
     new, modified_added, removed, modified_not_added, untracked, deleted = [], [],[],[],[],[]
 
     # TODO: work in GOOBIGNORE
+    cur_status = Status()
+
     all_files = [os.path.join(root, file)[2:] for root, dirs, files in os.walk(".") \
         for file in files if not ".goob" in root]
 
@@ -140,46 +175,32 @@ def status():
     for filename in all_files: # for every file in directory
         if filename not in index_data: # if not in index:
             if lookup_in_tree(filename, cur_commit.tree_hash): # if in last commit:
-                removed.append(filename)
+                cur_status.removed.append(filename)
             else:
-                untracked.append(filename)
+                cur_status.untracked.append(filename)
         else:
             hash_in_commit = lookup_in_tree(filename, cur_commit.tree_hash)
             file_hash = get_hash_of_file_contents(filename)
             if hash_in_commit: # if in previous commit:
                 if file_hash != index_data[filename]: # if hash of file diff from its hash in index
-                    modified_not_added.append(filename)
+                    cur_status.modified_not_added.append(filename)
                 elif file_hash != hash_in_commit: # if hash of file (= hash in index) diff from hash in commit:
-                    modified_added.append(filename)
+                    cur_status.modified_added.append(filename)
                 else:
                     # unchanged -- no action
                     pass
             else:
-                new.append(filename)
+                cur_status.new.append(filename)
 
     files_in_cur_commit = walk_tree(cur_commit.tree_hash)
     for filename in set(files_in_cur_commit).difference(set(all_files)):
         if filename in index_data:
-            deleted.append(filename) # uncommited delete (deleted)
+            cur_status.deleted.append(filename) # uncommited delete (deleted)
         else:
-            removed.append(filename) # committed delete (removed)
+            cur_status.removed.append(filename) # committed delete (removed)
 
-    print "Changes to be committed:" + colors.GREEN
-    for filename in new:
-        print "\tNew file:", filename
-    for filename in modified_added:
-        print "\tModified:", filename
-    for filename in removed:
-        print "\tDeleted:", filename
-    print colors.ENDC + "Changes not staged for commit:" + colors.RED
-    for filename in modified_not_added:
-        print "\tModified:", filename
-    for filename in deleted:
-        print "\tDeleted:", filename
-    print colors.ENDC + "Untracked files:" + colors.RED
-    for filename in untracked:
-        print "\t" + filename
-    print colors.ENDC
+    print cur_status
+    return cur_status
 
 @requires_repo
 def log():

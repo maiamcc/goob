@@ -5,7 +5,6 @@ import shutil
 import cPickle
 import tempfile
 import pudb
-from color import colors
 
 class BaseTest(unittest.TestCase):
     def setUp(self):

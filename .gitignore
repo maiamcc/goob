@@ -1,1 +1,3 @@
-goob.pyc
+*.pyc
+TODO
+temptests.py

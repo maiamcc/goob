@@ -2,7 +2,7 @@ import os
 import inspect
 import cPickle
 from hashlib import sha1
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import re
 import time
 from color import colors
@@ -27,6 +27,8 @@ class RepoExistsError(GoobError): pass
 class NoFileError(GoobError): pass
 class NoChangesError(GoobError): pass
 class BadHashError(GoobError): pass
+
+ObjectHash = namedtuple("ObjectHash", ["hash", "type"])
 
 ## DECORATORS
 def requires_repo(func):
@@ -162,9 +164,6 @@ def status():
         else:
             removed.append(filename) # committed delete (removed)
 
-
-    #TODO: pretty colors here
-
     print "Changes to be committed:" + colors.GREEN
     for filename in new:
         print "\tNew file:", filename
@@ -182,9 +181,9 @@ def status():
         print "\t" + filename
     print colors.ENDC
 
-    # for every file in index:
-        # if not in directory:
-            # deleted
+@requires_repo
+def log():
+    pass
 
 @requires_repo
 def checkout(commit_hash):
@@ -264,10 +263,10 @@ def make_tree(path_dict):
         if os.sep in path:
             directories[path.split(os.sep, 1)[0]][path.split(os.sep, 1)[1]] = hash
         else:
-            my_tree[path] = hash, "blob"
+            my_tree[path] = ObjectHash(hash, "blob")
 
     for dir, filedict in directories.iteritems():
-        my_tree[dir] = make_tree(filedict), "tree"
+        my_tree[dir] = ObjectHash(make_tree(filedict), "tree")
 
     hash = make_hash(str(sorted(my_tree.items())), "tree")
     save_hash(my_tree, hash)
@@ -310,7 +309,8 @@ def get_hash_of_file_contents(filename, type="blob"):
     return make_hash(contents, type)
 
 def get_hash_from_index(filename):
-
+    """Given a file, looks up its hash in the index, returns result. If file not
+        in index, raises error."""
     with open(INDEX_PATH) as f:
         try:
             index_data = cPickle.load(f)
@@ -322,10 +322,13 @@ def get_hash_from_index(filename):
         raise NoFileError("That file isn't in the index.")
 
 def hash_to_path(hash):
+    """Given a hash, turns it into the path to that file in the
+        .goob/objects directory."""
     return os.path.join(OBJECTS_PATH, hash[:2], hash[2:])
 
 def read_index():
-    """Returns the contents of the INDEX file. If INDEX is empty, returns an empty dict."""
+    """Returns the contents of the INDEX file. If INDEX is empty,
+        returns an empty dict."""
     with open(INDEX_PATH) as f:
         try:
             index_data = cPickle.load(f)
@@ -347,14 +350,14 @@ def lookup_in_tree(filename, tree_hash):
         subtree_data = tree_data
         try:
             while os.sep in filename:
-                subtree_data = read_hash(subtree_data[filename.split(os.sep, 1)[0]][0])
+                subtree_data = read_hash(subtree_data[filename.split(os.sep, 1)[0]].hash)
                 filename = filename.split(os.sep, 1)[1]
-            found_hash = subtree_data[filename][0]
+            found_hash = subtree_data[filename].hash
         except KeyError:
             found_hash = None
     else:
         try:
-            found_hash = tree_data[filename][0]
+            found_hash = tree_data[filename].hash
         except KeyError:
             found_hash = None
 
@@ -382,6 +385,3 @@ def walk_tree(tree_hash, prefix=None):
 # os.mkdir (makes directory)
 
 # different sub-programs per command?
-# TODO: currently goob only runs from the root dir of the project. Should fix this.
-# for later: colors! (http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python)
-

@@ -144,7 +144,6 @@ class Status(object):
         else:
             return False
 
-
 @requires_repo
 def status():
     """Displays untracked files, modified files, unmodified files."""
@@ -204,11 +203,15 @@ def status():
 
 @requires_repo
 def log():
+    """Displays a list of past commits."""
     pass
 
 @requires_repo
 def checkout(commit_hash):
     """Restores filesystem to state represented by given commit."""
+    # currently only works for full commit hash
+    cur_status = status()
+    # if any files in status are files in the previous commit, don't let user checkout
     # if modified files, ask you to add those changes first.
     # (if dir is goob repo, if commit exists)
     pass
@@ -267,10 +270,12 @@ def make_commit(msg):
     update_head(new_commit.__hash__())
 
 def get_cur_head():
+    """Returns the current head (i.e. the hash of the topmost commit)"""
     with open(POINTER_PATH) as f:
         return f.read()
 
 def update_head(commit_hash):
+    """Updates HEAD to point to the given commit."""
     with open(POINTER_PATH, "w") as f:
         f.write(commit_hash)
 
@@ -404,5 +409,3 @@ def walk_tree(tree_hash, prefix=None):
 ### USEFUL COMMANDS
 # os.path.: exists / isfile / isdir
 # os.mkdir (makes directory)
-
-# different sub-programs per command?
